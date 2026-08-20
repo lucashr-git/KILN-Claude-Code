@@ -3,9 +3,30 @@
 Plugin do Claude Code com especialistas para descoberta, pesquisa, decisão e
 implementação, além de codemap, LSP, busca e métricas.
 
+## Instalação publicada (macOS)
+
+Pré-requisitos: Claude Code, Node.js/npm e `jq` no `PATH`. Se `jq` estiver
+ausente, o instalador usa Homebrew para instalá-lo:
+
+```bash
+bunx @lucashr/kiln@0.1.0 install
+```
+
+Confira primeiro sem alterações:
+
+```bash
+bunx @lucashr/kiln@0.1.0 install --dry-run
+```
+
+O marketplace é copiado para `~/.local/share/kiln/marketplace`, e o plugin é
+instalado/atualizado no escopo user do Claude Code. O Claude CLI registra o
+marketplace e `enabledPlugins`; o instalador não edita diretamente
+`settings.json`, tokens Flow ou arquivos `env`. `rollback` troca a cópia
+durável pela anterior e reconcilia o registro sem remover estado pré-existente.
+
 ## Instalação local para teste
 
-Na raiz do repositório, instale `jq` e abra o Claude Code no projeto de trabalho:
+Na raiz do repositório, instale `jq` se necessário e abra o Claude Code no projeto de trabalho:
 
 ```bash
 brew install jq
@@ -14,15 +35,23 @@ claude --plugin-dir /caminho/para/kiln/plugin
 ```
 
 `jq` é obrigatório para os hooks. O Kiln configura as ferramentas, mas não
-instala todas as dependências delas.
+instala todas as dependências opcionais delas.
 
-Hoje não há um comando universal que instale o plugin e todas as dependências.
-Depois que um marketplace GitHub for publicado, o fluxo poderá ser:
+## Configuração do Claude e do Flow
+
+O instalador não configura credenciais nem edita `env` ou tokens. Autentique o
+Claude Code e configure o Flow pelos mecanismos oficiais da sua organização.
+Durante a instalação, o Claude CLI registra o marketplace e `enabledPlugins`;
+outras configurações do usuário são preservadas.
+
+Verificação simples: abra o Claude Code com o plugin e execute `/kiln:codemap`:
 
 ```bash
-claude plugin marketplace add owner/repo
-claude plugin install kiln@repo --yes
+claude --plugin-dir /caminho/para/kiln/plugin
 ```
+
+Instalação concisa: se necessário, instale `jq` com `brew install jq`. O plugin
+não instala as demais dependências opcionais.
 
 ## Opcionais
 

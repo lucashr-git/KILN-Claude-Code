@@ -29,15 +29,13 @@ PIDFILE="$SESSION_DIR/pid"
 BOOTFILE="$SESSION_DIR/.boot"
 LOCK="$ROOT/.open.lock"
 
-# onde está o companion? tenta o plugin primeiro, depois a instalação clássica
-APP=""
-for cand in "${CLAUDE_PLUGIN_ROOT:-}/companion" "$HOME/.claude/kiln" "$HOME/.claude/skills/kiln/companion"; do
-  [ -n "$cand" ] && [ -f "$cand/main.js" ] && { APP="$cand"; break; }
-done
-[ -n "$APP" ] || exit 0
+# O hook sempre usa a cópia durável gerenciada pelo instalador. A cópia do
+# checkout/plugin-dir pode desaparecer assim que o Claude carrega o plugin.
+APP="$HOME/.local/share/kiln/marketplace/plugin/companion"
+[ -f "$APP/main.js" ] || exit 0
+[ -L "$APP" ] && exit 0
 
 ELECTRON="$APP/node_modules/.bin/electron"
-[ -x "$ELECTRON" ] || ELECTRON="$HOME/.claude/kiln/node_modules/.bin/electron"
 [ -x "$ELECTRON" ] || exit 0
 
 mkdir -p "$SESSION_DIR" 2>/dev/null || exit 0

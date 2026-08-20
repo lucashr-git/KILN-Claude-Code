@@ -8,12 +8,64 @@ mudanças em um repositório. Os papéis principais são `researcher`, `advisor`
 ## Pré-requisitos e suporte
 
 - Claude Code instalado e funcionando.
-- `jq` no `PATH` (obrigatório para os hooks).
+- Node.js e npm no `PATH`.
+- `jq` no `PATH` (obrigatório para os hooks; o instalador pode instalá-lo via
+  Homebrew se necessário).
 - macOS: é a única plataforma em que o Kiln completo é suportado e testado hoje.
 - O Claude Code também suporta macOS, Linux e Windows, mas Linux e Windows ainda
   não são suportados pelo Kiln. iOS não executa o Claude Code localmente.
-- Node/npm e Python só são necessários para os componentes opcionais que você
-  escolher, como avatar e voz.
+
+## Instalação publicada
+
+Use a versão fixa para tornar a instalação reproduzível:
+
+```bash
+bunx @lucashr/kiln@0.1.0 install
+```
+
+O comando faz preflight de Claude Code, Node/npm e `jq`; se `jq` não estiver
+instalado, pede ao Homebrew para instalá-lo (Homebrew não é necessário quando
+`jq` já está no `PATH`). Ele copia o marketplace
+para `~/.local/share/kiln/marketplace`, instala o Electron do companion com
+`npm ci` e registra/instala `kiln@kiln-cc` no escopo user do Claude Code.
+
+Antes de alterar qualquer coisa, confira o plano:
+
+```bash
+bunx @lucashr/kiln@0.1.0 install --dry-run
+```
+
+Para trocar a cópia durável pela versão anterior:
+
+```bash
+bunx @lucashr/kiln@0.1.0 rollback
+```
+
+O instalador atual é somente macOS. Ele chama o Claude CLI, que registra o
+marketplace e `enabledPlugins` no estado do Claude Code; não edita diretamente
+`settings.json`, `env` ou tokens Flow. `rollback` reconcilia esse registro com a
+cópia anterior sem remover estado pré-existente. A instalação mantém uma cópia
+anterior. Voz é explicitamente opcional e fica fora do fluxo padrão.
+
+## Configuração do Claude e do Flow
+
+O instalador não configura credenciais. Autentique o Claude Code e configure
+eventuais variáveis do Flow pelo mecanismo oficial da sua organização; nunca
+cole tokens nesta documentação. O registro feito pela instalação é apenas o
+marketplace e `enabledPlugins`, via Claude CLI, preservando as demais
+configurações do usuário.
+
+Instalação concisa para teste local (instale `jq` somente se ainda não o tiver),
+abra o projeto e inicie o Claude Code com o plugin local:
+
+```bash
+brew install jq
+cd /caminho/para/seu-projeto
+claude --plugin-dir /caminho/para/kiln/plugin
+```
+
+Verificação simples: dentro do Claude Code, execute `/kiln:codemap` e confirme
+que ele responde sobre o repositório.
 
 ## Testar pelo diretório local
 
@@ -38,15 +90,6 @@ Para implementar uma mudança já decidida, use `@builder`. O contexto configura
 é de 1M de tokens e o gateway aceita `/effort`; o conteúdo útil é menor por causa
 do prompt, ferramentas e anexos. As medições detalhadas ficam em
 [`docs/gateway/measurements.md`](docs/gateway/measurements.md).
-
-Hoje não existe uma instalação universal de um único comando que instale o Kiln e
-todas as suas dependências. No futuro, depois que um marketplace GitHub for
-publicado, o fluxo poderá ser:
-
-```bash
-claude plugin marketplace add owner/repo
-claude plugin install kiln@repo --yes
-```
 
 ## Documentação
 

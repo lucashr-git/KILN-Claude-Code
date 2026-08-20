@@ -1,0 +1,28 @@
+{
+  "name": "@lucashr/kiln",
+  "version": "0.1.0",
+  "description": "Instalador do plugin Kiln para Claude Code",
+  "type": "module",
+  "bin": {
+    "kiln": "installer/bin/kiln.mjs"
+  },
+  "files": [
+    "installer",
+    "plugin",
+    ".claude-plugin/marketplace.json",
+    "LICENSE",
+    "README.md",
+    "plugin/README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test installer/test/*.test.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

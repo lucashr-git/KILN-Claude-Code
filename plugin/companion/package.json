@@ -5,5 +5,5 @@
   "description": "Avatares flutuantes dos golems que estao trabalhando no Claude Code",
   "main": "main.js",
   "scripts": { "start": "electron ." },
-  "devDependencies": { "electron": "33.4.11" }
+  "dependencies": { "electron": "33.4.11" }
 }

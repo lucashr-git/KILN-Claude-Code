@@ -73,11 +73,10 @@ builder, stylist, reader**. A regra que sobreviveu às três rodadas: o nome tem
 que dizer o ofício. E o coletivo deixou de ser "golems" para ser **Claudinhos**.
 
 **Voz local, não gateway.** O Flow não tem modelo de áudio (medimos: nenhum
-`whisper|audio|stt` no `/v1/models`). O ditado nativo do macOS resolveria só
-para você — mas Linux/Windows ficariam de fora. Então: **faster-whisper local**
-(`small`, multilíngue EN/PT-BR/ES), servidor HTTP minúsculo compatível com a
-API da OpenAI, o avatar sobe e descobre sozinho. Offline, privado, sem custo
-por uso, igual nos três sistemas.
+`whisper|audio|stt` no `/v1/models`). A voz é opcional e o fluxo suportado do
+Kiln é macOS-only; o ditado nativo do macOS é uma alternativa simples. O
+`faster-whisper` local (`small`, multilíngue EN/PT-BR/ES) continua fora da
+instalação padrão.
 
 **Aprovação pelo avatar via `PreToolUse`.** A primeira versão usava o hook
 `PermissionRequest` — e o clique em *allow* não fazia nada, porque esse hook
@@ -254,7 +253,7 @@ está na camada que você não está olhando.*
 | Council multi-modelo | impossível no gateway (só Anthropic); mitigado pelo `/kiln:hard` |
 | Skill de autoconfiguração | com um usuário, editar `agents/*.md` direto é mais rápido e auditável; o `kiln-doctor` cobre a detecção de quebra |
 | Transcrição pelo gateway | o Flow não tem modelo de áudio — medido, não suposto |
-| Colagem de voz no Linux/Windows | a transcrição funciona nos três; a *colagem automática* é macOS por ora (nos outros: clipboard + Ctrl+V) |
+| Linux/Windows | não são plataformas suportadas pelo instalador/Kiln completo; voz permanece fora do fluxo padrão |
 | Site tipo ohmyopencodeslim.com | é vitrine de produto público; antes vem repositório público, e antes disso vêm duas semanas de métricas |
 | CrewAI / SDK externo | exigiria API key paga por token e perderia o cache de 97% |
 
@@ -278,16 +277,16 @@ uso diário. A próxima milha não é código — é **usar duas semanas e deixa
 
 O que pode vir depois, se o uso pedir:
 
-1. **Colagem de voz em Linux/Windows** (xdotool / SendKeys) — quando um colega
-   de outra plataforma adotar o Kiln.
+1. **Suporte a Linux/Windows** — somente se o instalador deixar de ser macOS-only;
+   por ora não é uma plataforma suportada.
 2. **Site no GitHub Pages** com os Claudinhos animados — quando (se) o
    repositório virar público. Os sprites já renderizam em canvas web.
 3. **Chamado à TI** para liberar `mcp.grep.app`… não: **desnecessário** — era
    a config, já funciona. (Mantido aqui como lembrete do erro.)
 4. **`KILN_WHISPER_MODEL=medium`** se o PT-BR do `small` escorregar em termo
    técnico.
-5. **Distribuir para o time**: a pasta `plugin/` é autocontida — um colega
-   copia para `~/.claude/skills/kiln`, roda `fix-settings.py`, e tem tudo.
+5. **Distribuir para o time**: usar o pacote publicado e `kiln install`; cópia
+   manual não é o fluxo suportado.
 
 O que **não** deve vir: mais peça antes de duas semanas de uso real. Construir
 em cima de algo não usado é a armadilha padrão de ferramenta pessoal — e a
@@ -366,5 +365,5 @@ Igual em agentes, skills e ferramentas — 100% do possível num gateway de
 provedor único, desde hoje. Exceções nomeadas: Council (impossível) e
 autoconfig (decisão). Em instrumentação, o Kiln passou na frente.
 
-Para valer no disco:  bash ~/Downloads/kiln/install.sh --plugin
+Para valer no disco: `bunx @lucashr/kiln@0.1.0 install`.
 Novas: /kiln:clonedeps e /kiln:reflect

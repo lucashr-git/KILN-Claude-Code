@@ -44,17 +44,13 @@ MEDIR (1x por semana)
 ## 2. Instalação
 
 ```bash
-# 1. o pacote inteiro: avatar, hooks, métricas, plugin (Claudinhos+skills+MCPs+LSP)
-bash ~/Downloads/kiln/install.sh --plugin
+# 1. instalador publicado: marketplace, plugin, hooks e companion durável
+bunx @lucashr/kiln@0.1.0 install
 
-# 2. registra os hooks no settings.json (idempotente — rode sempre após instalar)
-python3 ~/Downloads/kiln/fix-settings.py
+# 2. voz local por Whisper (opcional; ~460MB uma vez; EN/PT-BR/ES; offline)
+bash plugin/voice/install-voz.sh
 
-# 3. voz local por Whisper (opcional; ~460MB uma vez; EN/PT-BR/ES; offline)
-bash ~/Downloads/kiln/install-voz.sh
-
-# 4. diagnóstico — 20 checagens dizem o que ficou de pé
-bash ~/Downloads/kiln/kiln-doctor.sh
+# 3. diagnóstico da sessão: use os comandos do Claude Code
 ```
 
 Binários externos que o plugin usa se existirem (o doctor confere):
@@ -312,7 +308,7 @@ pessoal). `--html r.html` gera relatório visual.
 |---|---|
 | `kiln-doctor.sh` | 20 checagens: o que está de pé e o que falta |
 | `testar-avatar.sh` | sobe o avatar com 12 Claudinhos falsos + pedido de aprovação falso — testa tudo sem gastar token |
-| `fix-settings.py` | (re)registra os hooks no settings.json sem destruir o resto |
+| `kiln install` | registra marketplace/enabledPlugins via Claude CLI |
 | `limpar-sessoes.py --dias 30` | inventário/limpeza de estado velho do ~/.claude |
 | `sondar-gateway.sh` | mede o gateway de verdade: efforts aceitos e teto de contexto |
 | `ajustar-settings.py --janela 1m` | declara a janela de contexto no settings |
@@ -376,8 +372,8 @@ fica de olho no pipeline e me avisa quando terminar        ← Monitor
 
 | Sintoma | Causa provável | Conserto |
 |---|---|---|
-| Avatar não abre | Electron não instalado / hook não registrado | `bash install.sh` de novo; `kiln-doctor.sh` |
-| Avatar abre mas nenhum Claudinho aparece | falta `jq`; hooks não registrados | `brew install jq`; `python3 fix-settings.py` |
+| Avatar não abre | Electron não instalado / hook não registrado | `kiln install` de novo; reabra o Claude Code |
+| Avatar abre mas nenhum Claudinho aparece | falta `jq` | instale `jq` (Homebrew é opcional se ele já estiver no PATH) |
 | Cliquei allow e o chat não andou | sessão antiga (hook velho) | feche TODAS as sessões claude e reabra |
 | Cartão de aprovação não aparece | sessão em modo automático (correto: ele respeita) | `Shift+Tab` até o modo manual ⏸ |
 | Voz: "local voice server not running" | primeiro boot do modelo demora | espere ~10s e clique de novo; `curl -s 127.0.0.1:8760/` |
@@ -406,7 +402,7 @@ fica de olho no pipeline e me avisa quando terminar        ← Monitor
 ## 12. Onde mora cada coisa
 
 ```
-~/Downloads/kiln/           ← fonte (edite aqui, rode install.sh para valer)
+~/Downloads/kiln/           ← fonte (edite aqui, publique/instale para valer)
   plugin/                   ← o plugin: agents/ skills/ .mcp.json .lsp.json
   companion/                ← o avatar (main.js, index.html, preload.js, sprites)
   hooks/                    ← os 4 hooks de shell
@@ -419,11 +415,11 @@ fica de olho no pipeline e me avisa quando terminar        ← Monitor
   kiln-stt/                 ← Whisper local (venv + servidor)
   hooks/kiln-*.sh           ← hooks instalados
   claude-metrics.py         ← métricas
-  settings.json             ← hooks registrados + effortLevel + janela 1M
+  settings.json             ← estado do usuário; CLI registra marketplace/plugins
 
 $TMPDIR/kiln/               ← estado vivo (por sessão): agentes, pedidos, pids
 ```
 
-Editar um Claudinho = editar `../plugin/agents/<nome>.md` e rodar `install.sh
---plugin`. Editar um sprite = mexer em `art/sprites.py` e rodar
+Editar um Claudinho = editar `../plugin/agents/<nome>.md` e rodar `kiln install`.
+Editar um sprite = mexer em `art/sprites.py` e rodar
 `python3 art/sprites.py` (regenera as duas cópias do `golems.json`).

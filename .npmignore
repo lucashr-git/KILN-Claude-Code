@@ -1,0 +1,6 @@
+.git/
+.gitignore
+plugin/companion/node_modules/
+plugin/companion/.claude/
+installer/test/
+docs/

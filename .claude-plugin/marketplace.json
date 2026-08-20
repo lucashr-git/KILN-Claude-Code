@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "kiln-cc",
+  "owner": {
+    "name": "Lucas Ribeiro"
+  },
+  "plugins": [
+    {
+      "name": "kiln",
+      "version": "0.1.0",
+      "source": "./plugin"
+    }
+  ]
+}

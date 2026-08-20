@@ -152,14 +152,16 @@ Sua linha de base já está registrada: **2% do custo fora da janela principal, 
 
 ## 6. Instalação do que já está pronto
 
+Use o instalador publicado; o trecho abaixo é apenas o fluxo histórico de
+desenvolvimento. O Claude CLI registra marketplace e `enabledPlugins`. O
+instalador não edita diretamente `settings.json`, `env` ou tokens.
+
 ```bash
-mkdir -p ~/.claude/hooks
-cp hooks/*.sh ~/.claude/hooks/ && chmod +x ~/.claude/hooks/*.sh
-cp -R companion ~/.claude/kiln
-cd ~/.claude/kiln && npm install          # baixa o Electron, uma vez só
+bunx @lucashr/kiln@0.1.0 install
 ```
 
-Some o conteúdo de `settings-snippet.json` no seu `~/.claude/settings.json` (mescle a chave `hooks`, não substitua).
+Configure credenciais ou variáveis do gateway separadamente, pelos mecanismos
+oficiais do Claude Code/da organização; não coloque tokens neste projeto.
 
 Testar sem o Claude Code:
 
