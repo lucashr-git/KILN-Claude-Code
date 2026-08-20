@@ -404,10 +404,12 @@ function voiceModel() {
 
 function logInstallSuccess(logger, withoutVoice) {
   logger.info('');
-  logger.info('   .-""-.');
-  logger.info('  ( o  o )');
-  logger.info('  |  \\/  |');
-  logger.info('   \\__/');
+  logger.info('    /\\/\\');
+  logger.info('   /####\\');
+  logger.info('  |# o o#|');
+  logger.info('  |#|[]|#|');
+  logger.info('  |#|##|#|');
+  logger.info('  |__||__|');
   logger.info('');
   if (withoutVoice) {
     logger.info('Kiln e avatar estão prontos. A voz local foi pulada por opção.');
