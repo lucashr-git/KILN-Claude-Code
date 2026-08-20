@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# agrep — busca ESTRUTURAL (AST), não textual. Entra no PATH do Bash quando o
+# plugin está ativo.
+#
+#   agrep 'if ($A) { return $B; }' --lang java
+#   agrep '$OBJ.getSession()' --lang java src/main
+#   agrep 'function $F($$$) { $$$ }' --lang ts
+#
+# $A/$B capturam um nó; $$$ captura uma lista. Precisa do ast-grep instalado:
+#   brew install ast-grep     (ou: npm i -g @ast-grep/cli)
+set -euo pipefail
+if ! command -v ast-grep >/dev/null 2>&1; then
+  echo "agrep: ast-grep não encontrado. Instale com: brew install ast-grep" >&2
+  exit 127
+fi
+[ $# -eq 0 ] && { echo "uso: agrep '<padrão>' --lang <linguagem> [caminho]" >&2; exit 2; }
+PATTERN="$1"; shift
+exec ast-grep run --pattern "$PATTERN" --heading never "$@"

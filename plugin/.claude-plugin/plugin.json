@@ -1,0 +1,9 @@
+{
+  "name": "kiln",
+  "description": "Kiln — time de Claudinhos especialistas para o Claude Code: roteamento por ofício, inteligência de código via LSP, busca estrutural (AST), pesquisa em milhões de repositórios, automação de navegador, avatares na tela e métricas de custo por agente",
+  "version": "0.1.0",
+  "author": {
+    "name": "lucas henrique claro"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,54 @@
+{
+  "java": {
+    "command": "jdtls",
+    "args": [
+      "-data",
+      "${CLAUDE_PROJECT_DIR}/.kiln/jdtls"
+    ],
+    "extensionToLanguage": {
+      ".java": "java"
+    },
+    "workspaceFolder": "${CLAUDE_PROJECT_DIR}",
+    "startupTimeout": 60000,
+    "restartOnCrash": true,
+    "maxRestarts": 3,
+    "diagnostics": true
+  },
+  "typescript": {
+    "command": "typescript-language-server",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".ts": "typescript",
+      ".tsx": "typescriptreact",
+      ".js": "javascript",
+      ".jsx": "javascriptreact"
+    },
+    "workspaceFolder": "${CLAUDE_PROJECT_DIR}",
+    "diagnostics": true
+  },
+  "python": {
+    "command": "pyright-langserver",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".py": "python",
+      ".pyi": "python"
+    },
+    "workspaceFolder": "${CLAUDE_PROJECT_DIR}",
+    "diagnostics": true
+  },
+  "csharp": {
+    "command": "csharp-ls",
+    "extensionToLanguage": {
+      ".cs": "csharp"
+    },
+    "workspaceFolder": "${CLAUDE_PROJECT_DIR}",
+    "startupTimeout": 60000,
+    "restartOnCrash": true,
+    "maxRestarts": 3,
+    "diagnostics": true
+  }
+}
