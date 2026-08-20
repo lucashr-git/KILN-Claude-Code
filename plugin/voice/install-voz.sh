@@ -16,21 +16,61 @@ case "$MODEL" in
     ;;
 esac
 
-PY="$(command -v python3 || command -v python || true)"
-if [ -z "$PY" ]; then
-  printf '✗ preciso de python3 no PATH\n' >&2
+python_version() {
+  "$1" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true
+}
+
+PY="${KILN_PYTHON:-}"
+if [ -n "$PY" ]; then
+  if [ ! -x "$PY" ]; then
+    PY="$(command -v "$PY" || true)"
+  fi
+else
+  for candidate in python3.12 python3.13; do
+    candidate_path="$(command -v "$candidate" || true)"
+    candidate_version=""
+    if [ -n "$candidate_path" ]; then
+      candidate_version="$(python_version "$candidate_path")"
+    fi
+    if [ "$candidate_version" = '3.12' ] || [ "$candidate_version" = '3.13' ]; then
+      PY="$candidate_path"
+      break
+    fi
+  done
+fi
+
+PY_VERSION=""
+if [ -n "$PY" ]; then
+  PY_VERSION="$(python_version "$PY")"
+fi
+if [ "$PY_VERSION" != '3.12' ] && [ "$PY_VERSION" != '3.13' ]; then
+  printf '✗ Python 3.12 ou 3.13 é obrigatório para a voz local (Python 3.14 não é suportado).\n' >&2
+  printf '  Instale manualmente com: brew install python@3.12\n' >&2
   exit 1
 fi
 
 printf '%s\n' '→ Kiln · voz local (Whisper, opcional)'
 mkdir -p "$DEST"
 
-if [ ! -x "$DEST/venv/bin/python" ]; then
+VPY="$DEST/venv/bin/python"
+if [ -x "$VPY" ]; then
+  VPY_VERSION="$(python_version "$VPY")"
+  if [ "$VPY_VERSION" != '3.12' ] && [ "$VPY_VERSION" != '3.13' ]; then
+    printf '%s\n' '  ambiente Python existente não é 3.12/3.13; recriando…'
+    rm -rf "$DEST/venv"
+  fi
+fi
+
+if [ ! -x "$VPY" ]; then
   printf '%s\n' '  criando ambiente Python isolado…'
   "$PY" -m venv "$DEST/venv"
 fi
-VPY="$DEST/venv/bin/python"
 [ -x "$VPY" ] || { printf '✗ não consegui criar %s\n' "$VPY" >&2; exit 1; }
+VPY_VERSION="$(python_version "$VPY")"
+if [ "$VPY_VERSION" != '3.12' ] && [ "$VPY_VERSION" != '3.13' ]; then
+  printf '✗ o venv criado não usa Python 3.12 ou 3.13\n' >&2
+  exit 1
+fi
 
 # Permite certificados corporativos sem tornar o servidor dependente deles.
 CA=""

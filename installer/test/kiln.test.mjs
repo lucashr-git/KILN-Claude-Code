@@ -1,9 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { install, pathsFor, rollback, runPreflight } from '../bin/kiln.mjs';
+import { execFile } from 'node:child_process';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { platform, tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+import { promisify } from 'node:util';
+import { install, parseInstallOptions, pathsFor, rollback, runPreflight } from '../bin/kiln.mjs';
+
+const execFileAsync = promisify(execFile);
+const repoRoot = join(process.cwd());
+
+async function createFakeCommand(bin, name) {
+  const script = name === 'claude'
+    ? '#!/bin/sh\nif [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then printf "[]\\n"; elif [ "$1" = "plugin" ] && [ "$2" = "list" ]; then printf "[]\\n"; fi\n'
+    : name === 'python3.12'
+      ? '#!/bin/sh\nprintf "Python 3.12.0\\n"\n'
+      : '#!/bin/sh\nprintf "1.0.0\\n"\n';
+  await writeFile(join(bin, name), script);
+  await chmod(join(bin, name), 0o755);
+}
 
 function fakeCommandRunner({ jq = true, calls = [] } = {}) {
   let marketplace = null;
@@ -11,6 +26,8 @@ function fakeCommandRunner({ jq = true, calls = [] } = {}) {
   return async (command, args = [], options = {}) => {
     calls.push({ command, args, options });
     if (command === 'jq' && !jq) throw Object.assign(new Error('not found'), { code: 'ENOENT' });
+    if (command === 'python3.12') return { stdout: 'Python 3.12.9\n', stderr: '' };
+    if (command === 'python3.13') throw Object.assign(new Error('not found'), { code: 'ENOENT' });
     if (command === 'npm' && args[0] === 'ci') {
       await mkdir(join(options.cwd, 'node_modules', '.bin'), { recursive: true });
       const electron = join(options.cwd, 'node_modules', '.bin', 'electron');
@@ -41,6 +58,8 @@ async function createPayload(source) {
   await mkdir(join(source, '.claude-plugin'), { recursive: true });
   await writeFile(join(source, 'plugin', 'companion', 'package.json'), '{}');
   await writeFile(join(source, 'plugin', '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'kiln', version: '0.1.0' }));
+  await mkdir(join(source, 'plugin', 'voice'), { recursive: true });
+  await writeFile(join(source, 'plugin', 'voice', 'install-voz.sh'), '#!/bin/sh\n');
   await writeFile(join(source, '.claude-plugin', 'marketplace.json'), '{}');
 }
 
@@ -53,6 +72,40 @@ test('preflight aceita macOS sem Homebrew quando jq já existe', async () => {
     } },
   });
   assert.equal(result.ok, true);
+});
+
+test('flag --without-voice é aceita com --dry-run', () => {
+  assert.deepEqual(parseInstallOptions(['--dry-run', '--without-voice']), {
+    dryRun: true,
+    withoutVoice: true,
+  });
+  assert.throws(() => parseInstallOptions(['--voice']), /Opção desconhecida/);
+});
+
+test('instalador manual rejeita Python 3.14 antes de criar o venv', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-voice-test-'));
+  const destination = join(root, 'stt');
+  const unsupported = join(root, 'python3.14');
+  const script = join(process.cwd(), 'plugin', 'voice', 'install-voz.sh');
+  await writeFile(unsupported, '#!/bin/sh\nprintf "3.14\\n"\n');
+  await chmod(unsupported, 0o755);
+
+  try {
+    let failure;
+    try {
+      await execFileAsync('bash', [script], {
+        env: { ...process.env, HOME: root, KILN_STT_DIR: destination, KILN_PYTHON: unsupported },
+      });
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure);
+    assert.match(failure.stderr, /Python 3\.12 ou 3\.13 é obrigatório/);
+    assert.match(failure.stderr, /brew install python@3\.12/);
+    await assert.rejects(stat(destination));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('preflight é mockável e anuncia instalação de jq no dry-run', async () => {
@@ -93,7 +146,43 @@ test('install --dry-run não cria o diretório durável nem toca em ~/.claude', 
     });
     await assert.rejects(stat(paths.durable));
     assert.match(messages.join('\n'), /nenhuma alteração/i);
+    assert.match(messages.join('\n'), /download único do modelo de voz Whisper 'small'/i);
     assert.equal(calls.some(({ command, args }) => command === 'npm' && args[0] === 'ci'), false);
+    assert.equal(calls.some(({ command }) => command === 'bash'), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('install --dry-run anuncia Homebrew para Python quando não há 3.12/3.13', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-test-'));
+  const source = join(root, 'source');
+  const paths = pathsFor(join(root, 'home'));
+  const calls = [];
+  const messages = [];
+  await createPayload(source);
+  const base = fakeCommandRunner({ calls });
+  const runCommand = async (command, args = [], options = {}) => {
+    if (command === 'python3.12' || command === 'python3.13') {
+      calls.push({ command, args, options });
+      throw Object.assign(new Error('not found'), { code: 'ENOENT' });
+    }
+    return base(command, args, options);
+  };
+
+  try {
+    await install({
+      dryRun: true,
+      platform: 'darwin',
+      sourceRoot: source,
+      paths,
+      deps: { ...(await import('node:fs/promises')), runCommand },
+      logger: { info: (message) => messages.push(message), warn: (message) => messages.push(message) },
+    });
+    assert.match(messages.join('\n'), /`brew install python@3\.12`/);
+    assert.match(messages.join('\n'), /`brew --prefix python@3\.12`/);
+    assert.match(messages.join('\n'), /KILN_PYTHON/);
+    assert.equal(calls.some(({ command, args }) => command === 'brew' && args.join(' ') === 'install python@3.12'), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -138,11 +227,97 @@ test('install usa staging, npm ci e os comandos do Claude em escopo user', async
     });
     assert.equal(await readFile(join(paths.durable, 'plugin', 'companion', 'package.json'), 'utf8'), '{}');
     assert.ok(calls.some(({ command, args }) => command === 'npm' && args[0] === 'ci'));
+    assert.ok(calls.some(({ command, args }) => command === 'bash' && args[0] === join(paths.durable, 'plugin', 'voice', 'install-voz.sh')));
     assert.ok(calls.some(({ command, args }) => command === 'claude' && args.join(' ') === `plugin marketplace add ${paths.durable} --scope user`));
     assert.ok(calls.some(({ command, args }) => command === 'claude' && args.includes('--scope') && args.includes('user')));
     assert.equal(calls.some(({ command, args }) => command === 'claude' && args.slice(0, 3).join(' ') === 'plugin marketplace list' && args.includes('--scope')), false);
     assert.equal(calls.some(({ command, args }) => command === 'claude' && args.slice(0, 2).join(' ') === 'plugin list' && args.includes('--scope')), false);
     assert.equal(calls.some(({ command, args }) => command === 'claude' && args.slice(0, 4).join(' ') === 'plugin marketplace update' && args.includes('--scope')), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('install prepara Python 3.12 via Homebrew e passa KILN_PYTHON para a voz', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-test-'));
+  const source = join(root, 'source');
+  const paths = pathsFor(join(root, 'home'));
+  const calls = [];
+  await createPayload(source);
+  const base = fakeCommandRunner({ calls });
+  const runCommand = async (command, args = [], options = {}) => {
+    if (command === 'python3.12' || command === 'python3.13') {
+      calls.push({ command, args, options });
+      throw Object.assign(new Error('not found'), { code: 'ENOENT' });
+    }
+    if (command === 'brew' && args.join(' ') === '--prefix python@3.12') {
+      calls.push({ command, args, options });
+      return { stdout: '/opt/homebrew/opt/python@3.12\n', stderr: '' };
+    }
+    return base(command, args, options);
+  };
+
+  try {
+    await install({
+      platform: 'darwin',
+      sourceRoot: source,
+      paths,
+      deps: { ...(await import('node:fs/promises')), runCommand },
+      logger: { info() {}, warn() {} },
+    });
+    assert.ok(calls.some(({ command, args }) => command === 'brew' && args.join(' ') === 'install python@3.12'));
+    assert.ok(calls.some(({ command, args }) => command === 'brew' && args.join(' ') === '--prefix python@3.12'));
+    const voiceCall = calls.find(({ command, args }) => command === 'bash' && args[0].endsWith('/install-voz.sh'));
+    assert.equal(voiceCall.options.env.KILN_PYTHON, '/opt/homebrew/opt/python@3.12/bin/python3.12');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('install --without-voice não executa o instalador de voz', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-test-'));
+  const source = join(root, 'source');
+  const paths = pathsFor(join(root, 'home'));
+  const calls = [];
+  await createPayload(source);
+
+  try {
+    await install({
+      platform: 'darwin',
+      withoutVoice: true,
+      sourceRoot: source,
+      paths,
+      deps: { ...(await import('node:fs/promises')), runCommand: fakeCommandRunner({ calls }) },
+      logger: { info() {}, warn() {} },
+    });
+    assert.equal(calls.some(({ command }) => command === 'bash'), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('falha de voz falha a instalação e reverte a cópia durável', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-test-'));
+  const source = join(root, 'source');
+  const paths = pathsFor(join(root, 'home'));
+  const calls = [];
+  await createPayload(source);
+  const base = fakeCommandRunner({ calls });
+  const runCommand = async (command, args = [], options = {}) => {
+    if (command === 'bash') {
+      calls.push({ command, args, options });
+      throw new Error('download do Whisper falhou');
+    }
+    return base(command, args, options);
+  };
+
+  try {
+    await assert.rejects(
+      install({ platform: 'darwin', sourceRoot: source, paths, deps: { ...(await import('node:fs/promises')), runCommand }, logger: { info() {}, warn() {} } }),
+      /Falha na instalação da voz local|download do Whisper falhou/i,
+    );
+    await assert.rejects(stat(paths.durable));
+    assert.ok(calls.some(({ command }) => command === 'bash'));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -186,6 +361,8 @@ test('install normal reinstala quando a versão ativa do cache está antiga', as
   let plugin = { name: 'kiln', version: '0.0.1', source: paths.durable, scope: 'user' };
   const runCommand = async (command, args = [], options = {}) => {
     calls.push({ command, args, options });
+    if (command === 'python3.12') return { stdout: 'Python 3.12.9\n', stderr: '' };
+    if (command === 'python3.13') throw Object.assign(new Error('not found'), { code: 'ENOENT' });
     if (command === 'npm' && args[0] === 'ci') {
       await mkdir(join(options.cwd, 'node_modules', '.bin'), { recursive: true });
       const electron = join(options.cwd, 'node_modules', '.bin', 'electron');
@@ -305,6 +482,44 @@ test('pós-instalação aceita marketplace criado com scope user sem scope no in
   try {
     await install({ platform: 'darwin', sourceRoot: source, paths, deps: { ...(await import('node:fs/promises')), runCommand }, logger: { info() {}, warn() {} } });
     await stat(paths.durable);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('binário empacotado executa pelo symlink do npm', { skip: platform() !== 'darwin' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-package-test-'));
+  const fakeBin = join(root, 'fake-bin');
+  const installRoot = join(root, 'consumer');
+  const home = join(root, 'home');
+
+  try {
+    await mkdir(fakeBin);
+    await createFakeCommand(fakeBin, 'claude');
+    await createFakeCommand(fakeBin, 'jq');
+    await createFakeCommand(fakeBin, 'python3.12');
+
+    const packed = await execFileAsync('npm', ['pack', '--json', '--pack-destination', root], { cwd: repoRoot });
+    const metadata = JSON.parse(packed.stdout);
+    assert.equal(metadata.length, 1);
+    const archive = join(root, metadata[0].filename);
+
+    await execFileAsync('npm', ['install', '--prefix', installRoot, '--no-save', '--ignore-scripts', archive], { cwd: repoRoot });
+    const binary = join(installRoot, 'node_modules', '.bin', 'kiln');
+    assert.equal((await lstat(binary)).isSymbolicLink(), true);
+    await stat(binary);
+
+    const result = await execFileAsync(binary, ['install', '--dry-run'], {
+      cwd: installRoot,
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${fakeBin}${delimiter}${process.env.PATH || ''}`,
+      },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.match(output, /Dry run: nenhuma alteração foi feita/);
+    assert.match(output, /Dry run: payload seria instalado em/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

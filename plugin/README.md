@@ -18,11 +18,16 @@ Confira primeiro sem alterações:
 bunx @lucashr/kiln@0.1.0 install --dry-run
 ```
 
-O marketplace é copiado para `~/.local/share/kiln/marketplace`, e o plugin é
-instalado/atualizado no escopo user do Claude Code. O Claude CLI registra o
-marketplace e `enabledPlugins`; o instalador não edita diretamente
-`settings.json`, tokens Flow ou arquivos `env`. `rollback` troca a cópia
-durável pela anterior e reconcilia o registro sem remover estado pré-existente.
+O marketplace é copiado para `~/.local/share/kiln/marketplace`, o plugin é
+instalado/atualizado no escopo user do Claude Code e a voz local é instalada por
+padrão. O Whisper faz um download único do modelo e depois trabalha localmente.
+Use `--without-voice` para pulá-la explicitamente. A instalação usa somente
+Python 3.12 ou 3.13; quando ambos faltam, `kiln install` executa
+`brew install python@3.12`, consulta `brew --prefix python@3.12` e passa o
+executável por `KILN_PYTHON`. O Claude CLI registra o
+marketplace e `enabledPlugins`; o instalador não edita diretamente `settings.json`,
+tokens Flow ou arquivos `env`. `rollback` troca a cópia durável pela anterior e
+reconcilia o registro sem remover estado pré-existente.
 
 ## Instalação local para teste
 
@@ -53,7 +58,7 @@ claude --plugin-dir /caminho/para/kiln/plugin
 Instalação concisa: se necessário, instale `jq` com `brew install jq`. O plugin
 não instala as demais dependências opcionais.
 
-## Opcionais
+## Componentes opcionais
 
 ### Avatar (Electron)
 
@@ -68,12 +73,20 @@ Sem esse passo, o plugin continua funcionando sem avatar.
 
 ### Voz local
 
-A voz é somente transcrição local com Whisper; não é necessária para usar o
-plugin:
+A voz é transcrição local com Whisper e já é instalada por `kiln install`. O
+download do modelo acontece uma única vez. Para instalar manualmente ou reparar
+uma instalação:
 
 ```bash
 cd /caminho/para/kiln/plugin/voice
 bash install-voz.sh
+```
+
+O instalador manual aceita somente Python 3.12 ou 3.13. Se nenhum deles existir,
+ele sai antes de criar ou alterar o venv e orienta:
+
+```bash
+brew install python@3.12
 ```
 
 ## Uso rápido

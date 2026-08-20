@@ -47,11 +47,17 @@ MEDIR (1x por semana)
 # 1. instalador publicado: marketplace, plugin, hooks e companion durável
 bunx @lucashr/kiln@0.1.0 install
 
-# 2. voz local por Whisper (opcional; ~460MB uma vez; EN/PT-BR/ES; offline)
-bash plugin/voice/install-voz.sh
+# 2. voz local por Whisper já é instalada pelo comando acima (download único)
+#    use `kiln install --without-voice` para pulá-la explicitamente
 
 # 3. diagnóstico da sessão: use os comandos do Claude Code
 ```
+
+A voz usa somente Python 3.12 ou 3.13. Se nenhum estiver no `PATH`, `kiln
+install` instala `python@3.12` via Homebrew, consulta `brew --prefix
+python@3.12` e passa o executável ao instalador por `KILN_PYTHON`. Na execução
+manual, `install-voz.sh` encerra antes de criar ou alterar o venv e orienta
+`brew install python@3.12`.
 
 Binários externos que o plugin usa se existirem (o doctor confere):
 `jq` (obrigatório para os hooks), `ast-grep` (busca estrutural), `jdtls`
@@ -314,7 +320,7 @@ pessoal). `--html r.html` gera relatório visual.
 | `ajustar-settings.py --janela 1m` | declara a janela de contexto no settings |
 | `dieta-contexto.py` | mede o overhead de skills/agents/MCP por sessão |
 | `checar-compatibilidade.py` | valida o plugin contra o SEU settings.json real |
-| `install-voz.sh` | instala/atualiza o Whisper local |
+| `install-voz.sh` | instala/atualiza o Whisper local; `kiln install` executa por padrão |
 
 Logs quando algo estranhar: `/tmp/kiln-companion.log` (avatar),
 `/tmp/kiln-stt.log` (voz), `$TMPDIR/kiln/approve.log` (aprovações).

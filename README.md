@@ -27,7 +27,12 @@ O comando faz preflight de Claude Code, Node/npm e `jq`; se `jq` não estiver
 instalado, pede ao Homebrew para instalá-lo (Homebrew não é necessário quando
 `jq` já está no `PATH`). Ele copia o marketplace
 para `~/.local/share/kiln/marketplace`, instala o Electron do companion com
-`npm ci` e registra/instala `kiln@kiln-cc` no escopo user do Claude Code.
+`npm ci`, instala a voz local por padrão (Whisper, com download único do modelo)
+e registra/instala `kiln@kiln-cc` no escopo user do Claude Code. Para pular a
+voz explicitamente, use `--without-voice`. A voz usa somente Python 3.12 ou
+3.13; se nenhum estiver disponível, o instalador instala `python@3.12` via
+Homebrew, descobre seu executável com `brew --prefix python@3.12` e o passa por
+`KILN_PYTHON`.
 
 Antes de alterar qualquer coisa, confira o plano:
 
@@ -45,7 +50,12 @@ O instalador atual é somente macOS. Ele chama o Claude CLI, que registra o
 marketplace e `enabledPlugins` no estado do Claude Code; não edita diretamente
 `settings.json`, `env` ou tokens Flow. `rollback` reconcilia esse registro com a
 cópia anterior sem remover estado pré-existente. A instalação mantém uma cópia
-anterior. Voz é explicitamente opcional e fica fora do fluxo padrão.
+anterior. A voz local é instalada por padrão e baixa o modelo uma única vez;
+use `--without-voice` para pulá-la explicitamente.
+
+Na instalação manual da voz, use Python 3.12 ou 3.13. Se esses interpretadores
+não estiverem disponíveis, o script encerra sem criar ou alterar o ambiente e
+orienta `brew install python@3.12`.
 
 ## Configuração do Claude e do Flow
 
@@ -66,6 +76,19 @@ claude --plugin-dir /caminho/para/kiln/plugin
 
 Verificação simples: dentro do Claude Code, execute `/kiln:codemap` e confirme
 que ele responde sobre o repositório.
+
+## Testes
+
+Na raiz do repositório, execute:
+
+```bash
+npm test
+npm run pack:check
+```
+
+Além dos testes unitários, `npm test` empacota o projeto, instala o `.tgz` em
+um diretório temporário e executa o CLI instalado pelo symlink do npm em
+`install --dry-run`.
 
 ## Testar pelo diretório local
 

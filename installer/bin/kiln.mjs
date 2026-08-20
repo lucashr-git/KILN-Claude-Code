@@ -2,6 +2,7 @@
 
 import { execFile } from 'node:child_process';
 import { cp, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { homedir, platform as hostPlatform } from 'node:os';
@@ -391,6 +392,108 @@ function plannedCommands(paths) {
     ['claude', ['plugin', 'marketplace', 'add', paths.durable, '--scope', 'user'], undefined],
     ['claude', ['plugin', 'install', PLUGIN_SPEC, '--scope', 'user', '--yes'], undefined],
   ];
+}
+
+function voiceInstallerPath(paths) {
+  return join(paths.durable, 'plugin', 'voice', 'install-voz.sh');
+}
+
+function voiceModel() {
+  return process.env.KILN_WHISPER_MODEL || 'small';
+}
+
+function logInstallSuccess(logger, withoutVoice) {
+  logger.info('');
+  logger.info('   .-""-.');
+  logger.info('  ( o  o )');
+  logger.info('  |  \\/  |');
+  logger.info('   \\__/');
+  logger.info('');
+  if (withoutVoice) {
+    logger.info('Kiln e avatar estão prontos. A voz local foi pulada por opção.');
+  } else {
+    logger.info('Kiln, avatar e voz local estão prontos.');
+  }
+  logger.info('Próximo comando: claude');
+}
+
+const VOICE_PYTHON_FORMULA = 'python@3.12';
+
+function supportedPythonVersion(result) {
+  const output = `${result?.stdout || ''}\n${result?.stderr || ''}`;
+  const match = output.match(/Python\s+3\.(12|13)(?:\.|\s|$)/i);
+  return match ? `3.${match[1]}` : null;
+}
+
+async function findSupportedVoicePython(deps) {
+  const configured = String(process.env.KILN_PYTHON || '').trim();
+  const candidates = [...new Set([configured, 'python3.12', 'python3.13'].filter(Boolean))];
+  for (const candidate of candidates) {
+    try {
+      const result = await deps.runCommand(candidate, ['--version']);
+      if (supportedPythonVersion(result)) return candidate;
+    } catch {
+      // Try the next supported interpreter name.
+    }
+  }
+  return null;
+}
+
+/**
+ * Ensure that the voice installer receives a Python version with PyAV wheels.
+ * The Homebrew path is injected so the formula does not need to be linked into
+ * PATH, and dry-run only reports the commands without running installation.
+ */
+export async function prepareVoicePython({ dryRun = false, deps = defaultDeps, logger = defaultLogger } = {}) {
+  const existing = await findSupportedVoicePython(deps);
+  if (existing) return { python: existing, installed: false };
+
+  if (!(await commandAvailable('brew', deps))) {
+    throw new Error('Python 3.12 ou 3.13 não foi encontrado. Instale o Homebrew e execute `brew install python@3.12`, ou configure KILN_PYTHON.');
+  }
+
+  if (dryRun) {
+    logger.info('Dry run: Python 3.12/3.13 ausente; executaria `brew install python@3.12`.');
+    logger.info('Dry run: executaria `brew --prefix python@3.12` e passaria o executável via KILN_PYTHON.');
+    return { python: null, installed: true };
+  }
+
+  logger.info('Python 3.12/3.13 não encontrado; executando `brew install python@3.12`...');
+  try {
+    await deps.runCommand('brew', ['install', VOICE_PYTHON_FORMULA]);
+  } catch (error) {
+    throw new Error(`Não foi possível instalar Python via Homebrew: ${formatCommandError(error)}`);
+  }
+
+  let prefixResult;
+  try {
+    prefixResult = await deps.runCommand('brew', ['--prefix', VOICE_PYTHON_FORMULA]);
+  } catch (error) {
+    throw new Error(`Não foi possível descobrir o Python instalado via Homebrew: ${formatCommandError(error)}`);
+  }
+  const prefix = String(prefixResult?.stdout || '').trim();
+  if (!prefix) throw new Error('Homebrew não retornou o prefixo de python@3.12.');
+  const python = join(prefix, 'bin', 'python3.12');
+  logger.info(`Python da voz: KILN_PYTHON=${python}`);
+  return { python, installed: true };
+}
+
+async function installVoice(paths, deps, python) {
+  const script = voiceInstallerPath(paths);
+  const homeRoot = homeForDataRoot(paths.dataRoot);
+  // The voice installer is part of the already-swapped, verified payload.
+  await assertMutablePath(script, deps, homeRoot);
+  const scriptStat = await deps.lstat(script);
+  if (!scriptStat.isFile() || scriptStat.isSymbolicLink()) {
+    throw new Error(`Instalador de voz não é um arquivo regular: ${script}`);
+  }
+  try {
+    const env = { ...process.env };
+    if (python) env.KILN_PYTHON = python;
+    await deps.runCommand('bash', [script], { cwd: dirname(script), env });
+  } catch (error) {
+    throw new Error(`Falha na instalação da voz local: ${formatCommandError(error)}`);
+  }
 }
 
 function parseJsonOutput(output) {
@@ -794,6 +897,7 @@ async function swapIntoPlace(staging, paths, deps) {
 /** Install the packaged marketplace. No filesystem mutation occurs for dryRun. */
 export async function install({
   dryRun = false,
+  withoutVoice = false,
   platform = hostPlatform(),
   sourceRoot = sourceRootFromModule(),
   paths = pathsFor(),
@@ -821,7 +925,13 @@ export async function install({
     for (const [command, args, cwd] of plannedCommands(paths)) {
       logger.info(`Dry run: ${command} ${args.join(' ')}${cwd ? ` (cwd: ${cwd})` : ''}`);
     }
-    logger.info('Dry run: voz não é instalada nem habilitada por este comando.');
+    if (withoutVoice) {
+      logger.info('Dry run: voz local seria explicitamente ignorada por --without-voice.');
+    } else {
+      await prepareVoicePython({ dryRun: true, deps, logger });
+      logger.info(`Dry run: bash ${voiceInstallerPath(paths)} (cwd: ${join(paths.durable, 'plugin', 'voice')})`);
+      logger.info(`Dry run: download único do modelo de voz Whisper '${voiceModel()}'.`);
+    }
     return { dryRun: true, preflight, paths };
   }
 
@@ -831,17 +941,25 @@ export async function install({
   let rollbackCopy = null;
   try {
     await deps.mkdir(staging, { recursive: false, mode: 0o700 });
-    logger.info(`Preparando marketplace em staging: ${staging}`);
+    logger.info('Etapa 1/4: preparando Kiln...');
     await copyPayload(sourceRoot, staging, deps);
-    logger.info('Instalando Electron com npm ci...');
+    logger.info('Etapa 2/4: preparando o avatar...');
     await installElectron(staging, deps);
     rollbackCopy = await swapIntoPlace(staging, paths, deps);
     try {
       await verifyDurable(paths, deps);
+      logger.info('Etapa 3/4: conectando Kiln ao Claude Code...');
       await runClaudeInstall(paths, deps, logger, claudeBefore, { transactionState });
       await verifyDurable(paths, deps);
+      if (withoutVoice) {
+        logger.info('Voz local ignorada por --without-voice.');
+      } else {
+        logger.info(`Etapa 4/4: preparando voz local (Whisper '${voiceModel()}')...`);
+        const voicePython = await prepareVoicePython({ deps, logger });
+        await installVoice(paths, deps, voicePython.python);
+      }
     } catch (error) {
-      logger.warn('Falha no Claude CLI; revertendo a cópia durável para a versão anterior.');
+      logger.warn('Falha na validação/instalação; revertendo a cópia durável para a versão anterior.');
       let failure = error;
       try {
         await rollbackCopy.rollback();
@@ -860,7 +978,8 @@ export async function install({
     rollbackCopy = null;
     logger.info(`Kiln ${PACKAGE_VERSION} instalado/atualizado em escopo user.`);
     logger.info('O Claude CLI registra marketplace/enabledPlugins; o instalador não edita env nem tokens.');
-    logger.info('Voz permanece opcional e fora da instalação padrão.');
+    logger.info(withoutVoice ? 'Voz local foi pulada explicitamente.' : 'Voz local instalada por padrão.');
+    logInstallSuccess(logger, withoutVoice);
     return { dryRun: false, preflight, paths };
   } finally {
     await removeIfExists(staging, deps, homeForDataRoot(paths.dataRoot));
@@ -927,11 +1046,21 @@ export async function rollback({
 function usage() {
   return [
     'Uso:',
-    '  kiln install [--dry-run]',
+    '  kiln install [--dry-run] [--without-voice]',
     '  kiln rollback',
     '',
-    'macOS only. A instalação padrão não configura Flow nem instala voz.',
+    'macOS only. A instalação padrão instala voz local com um download único do modelo.',
+    'Use --without-voice para pular explicitamente a instalação de voz.',
   ].join('\n');
+}
+
+export function parseInstallOptions(flags) {
+  const invalid = flags.filter((flag) => flag !== '--dry-run' && flag !== '--without-voice');
+  if (invalid.length > 0) throw new Error(`Opção desconhecida: ${invalid.join(', ')}`);
+  return {
+    dryRun: flags.includes('--dry-run'),
+    withoutVoice: flags.includes('--without-voice'),
+  };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -945,9 +1074,7 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
   if (command === 'install') {
-    const invalid = flags.filter((flag) => flag !== '--dry-run');
-    if (invalid.length > 0) throw new Error(`Opção desconhecida: ${invalid.join(', ')}`);
-    await install({ dryRun: flags.includes('--dry-run') });
+    await install(parseInstallOptions(flags));
     return 0;
   }
   if (command === 'rollback') {
@@ -958,7 +1085,18 @@ export async function main(argv = process.argv.slice(2)) {
   throw new Error(`Comando desconhecido: ${command}\n\n${usage()}`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    // A directly invoked file should still work if the filesystem changes
+    // between argv inspection and resolution; imports must remain inert.
+    return resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  }
+}
+
+if (isMainModule()) {
   main().catch((error) => {
     console.error(`Kiln installer: ${error.message}`);
     process.exitCode = 1;
